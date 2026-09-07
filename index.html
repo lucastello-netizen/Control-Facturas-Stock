@@ -598,10 +598,16 @@
                         <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
                         <input type="text" id="supplierSearchInput" onkeyup="App.renderSuppliersView()" placeholder="Buscar proveedor por nombre, CUIT, rubro..." class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none">
                     </div>
-                    <button onclick="App.openSupplierModal()" class="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors">
-                        <i class="fa-solid fa-plus"></i>
-                        <span>Nuevo Proveedor</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="App.openImportModal('proveedores')" class="inline-flex items-center gap-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-bold py-2 px-3 rounded-lg border border-teal-300 transition-colors">
+                            <i class="fa-solid fa-file-import"></i>
+                            <span>Importar Lista</span>
+                        </button>
+                        <button onclick="App.openSupplierModal()" class="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Nuevo Proveedor</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="suppliersCardGrid">
@@ -1032,6 +1038,10 @@
                             <i class="fa-solid fa-tags"></i>
                             <span>Gestionar Categorías</span>
                         </button>
+                        <button onclick="App.openImportModal('insumos')" class="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold py-2 px-3 rounded-lg border border-emerald-300 transition-colors">
+                            <i class="fa-solid fa-file-import"></i>
+                            <span>Importar Lista</span>
+                        </button>
                         <button onclick="ProductManager.exportProductsToCSV()" class="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold py-2 px-3 rounded-lg border border-slate-300 transition-colors">
                             <i class="fa-solid fa-file-excel text-emerald-600"></i>
                             <span>Exportar Lista</span>
@@ -1306,6 +1316,139 @@
                     <button onclick="App.saveSnapshot()" class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-2 px-5 rounded-lg shadow-sm transition-colors">
                         <i class="fa-solid fa-floppy-disk"></i>
                         Guardar Conteo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: IMPORTADOR MASIVO (INSUMOS Y PROVEEDORES) -->
+    <div id="importModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] animate-fade-in">
+            <!-- Modal Header -->
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-gradient-to-r from-emerald-50 via-teal-50 to-white">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow">
+                        <i class="fa-solid fa-file-import text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base">Importador Masivo desde Excel o CSV</h3>
+                        <p class="text-xs text-slate-500">Carga rápida de catálogo de insumos, stock inicial, costos y proveedores.</p>
+                    </div>
+                </div>
+                <button onclick="App.closeImportModal()" class="w-8 h-8 rounded-lg hover:bg-slate-200/60 flex items-center justify-center text-slate-500 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Tab Selector -->
+            <div class="px-6 pt-4 border-b border-slate-100 flex items-center justify-between gap-4 shrink-0 bg-white">
+                <div class="flex gap-2">
+                    <button id="importTabBtnInsumos" onclick="App.switchImportTab('insumos')" class="px-4 py-2 border-b-2 border-emerald-600 text-emerald-700 font-bold text-xs flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Importar Insumos (con Proveedor)</span>
+                    </button>
+                    <button id="importTabBtnProveedores" onclick="App.switchImportTab('proveedores')" class="px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-truck-field"></i>
+                        <span>Importar Directorio de Proveedores</span>
+                    </button>
+                </div>
+                <div>
+                    <button id="btnDownloadTemplate" onclick="App.downloadImportTemplate()" class="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg font-semibold transition-colors">
+                        <i class="fa-solid fa-file-arrow-down"></i>
+                        <span>Descargar Plantilla de Ejemplo (.csv)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Body Scrollable -->
+            <div class="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+                <!-- Info banner -->
+                <div id="importInfoBanner" class="bg-sky-50 border border-sky-200 rounded-xl p-3.5 flex items-start gap-3 text-sky-900">
+                    <i class="fa-solid fa-circle-info text-sky-600 mt-0.5 text-sm shrink-0"></i>
+                    <div class="space-y-1">
+                        <p class="font-bold">Columnas recomendadas:</p>
+                        <p id="importColumnsHint" class="text-sky-800 text-[11px] leading-relaxed">
+                            <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Nombre</span>, 
+                            <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Codigo</span>, 
+                            <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Categoria</span>, 
+                            <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Proveedor</span>, 
+                            <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Unidad</span>, 
+                            <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockActual</span>, 
+                            <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockMinimo</span>, 
+                            <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CostoNeto</span>
+                        </p>
+                        <p class="text-[10px] text-sky-700 font-medium">💡 Si un proveedor o categoría en la lista no existe, el sistema lo creará automáticamente.</p>
+                    </div>
+                </div>
+
+                <!-- Input Methods: File or Paste -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Option A: File Upload -->
+                    <div class="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-4 text-center bg-slate-50/60 hover:bg-emerald-50/20 transition-all flex flex-col items-center justify-center cursor-pointer relative" onclick="document.getElementById('importFileInput').click()">
+                        <input type="file" id="importFileInput" accept=".csv,.txt,.tsv" onchange="App.handleImportFileSelect(event)" class="hidden">
+                        <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg mb-2 shadow-sm">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <p class="font-bold text-slate-700 text-xs">Subir archivo CSV / Excel (.csv, .txt)</p>
+                        <p class="text-[10px] text-slate-400 mt-1">Haz clic para seleccionar o arrastra el archivo aquí</p>
+                        <p id="importSelectedFileName" class="text-xs font-bold text-emerald-700 mt-2 truncate max-w-[200px]"></p>
+                    </div>
+
+                    <!-- Option B: Direct Copy-Paste from Excel -->
+                    <div class="space-y-1.5">
+                        <label class="block font-bold text-slate-700 text-xs flex items-center justify-between">
+                            <span>O pega texto copiado de Excel aquí:</span>
+                            <span class="text-[10px] text-slate-400 font-normal">Copia celdas en Excel y presiona Ctrl+V</span>
+                        </label>
+                        <textarea id="importPasteTextarea" oninput="App.handleImportPasteInput()" rows="4" placeholder="Pega aquí filas y columnas copiadas de Excel..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono text-[11px] focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none"></textarea>
+                    </div>
+                </div>
+
+                <!-- Options -->
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" id="importUpdateExistingCheck" checked class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500">
+                        <span class="font-medium text-slate-700">Actualizar datos si el insumo/proveedor ya existe por código o nombre</span>
+                    </label>
+                    <button type="button" onclick="App.clearImportData()" class="text-slate-500 hover:text-red-600 text-xs font-medium transition-colors">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Limpiar datos
+                    </button>
+                </div>
+
+                <!-- Live Preview Table -->
+                <div id="importPreviewContainer" class="hidden space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-slate-800 text-xs flex items-center gap-2">
+                            <i class="fa-solid fa-table-list text-emerald-600"></i>
+                            <span>Vista previa de datos detectados (<span id="importPreviewCount">0</span> registros):</span>
+                        </h4>
+                        <span id="importPreviewBadge" class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Listo para importar</span>
+                    </div>
+
+                    <div class="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead id="importPreviewThead" class="bg-slate-100 text-slate-700 font-bold sticky top-0 border-b border-slate-200">
+                                <!-- Dinámico -->
+                            </thead>
+                            <tbody id="importPreviewTbody" class="divide-y divide-slate-100">
+                                <!-- Dinámico -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 bg-slate-50">
+                <div id="importStatusMessage" class="text-xs text-slate-600 font-medium"></div>
+                <div class="flex gap-2">
+                    <button onclick="App.closeImportModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                        Cancelar
+                    </button>
+                    <button id="btnExecuteImport" onclick="App.executeImport()" disabled class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold py-2 px-5 rounded-lg shadow-sm transition-colors">
+                        <i class="fa-solid fa-check"></i>
+                        <span>Confirmar e Importar</span>
                     </button>
                 </div>
             </div>

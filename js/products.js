@@ -186,4 +186,365 @@ class ProductManager {
         a.click();
         URL.revokeObjectURL(url);
     }
+
+    /**
+     * Parsea texto delimitado (CSV con punto y coma o coma, o TSV tabulado copiado de Excel)
+     */
+    static parseDelimitedText(text) {
+        if (!text || !text.trim()) return [];
+        const lines = text.trim().split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length === 0) return [];
+
+        // Detectar delimitador inspeccionando la primera línea
+        const firstLine = lines[0];
+        let delimiter = ';';
+        if (firstLine.includes('\t')) {
+            delimiter = '\t';
+        } else if (firstLine.includes(';') && !firstLine.includes(',')) {
+            delimiter = ';';
+        } else if (firstLine.includes(',') && !firstLine.includes(';')) {
+            delimiter = ',';
+        } else if (firstLine.includes(';')) {
+            delimiter = ';';
+        } else if (firstLine.includes(',')) {
+            delimiter = ',';
+        }
+
+        const parseLine = (line) => {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"' || char === "'") {
+                    if (inQuotes && line[i + 1] === char) {
+                        current += char;
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === delimiter && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        };
+
+        const parsedRows = lines.map(parseLine);
+        return parsedRows;
+    }
+
+    /**
+     * Descarga plantilla CSV de ejemplo para importar Insumos
+     */
+    static downloadProductsTemplate() {
+        const headers = ['Nombre', 'Codigo', 'Categoria', 'Proveedor', 'Unidad', 'StockActual', 'StockMinimo', 'CostoNeto', 'PrecioVenta', 'Notas'];
+        const examples = [
+            ['Harina 000 25kg', 'HAR-001', 'Secos y Almacén', 'Molinos del Plata', 'kg', '150', '50', '850.50', '0', 'Bolsa cerrada'],
+            ['Levadura Fresca', 'LEV-002', 'Lácteos y Frescos', 'Distribuidora Central', 'kg', '20', '10', '1200.00', '0', 'Refrigerar a 4C'],
+            ['Cajas Packaging 20x20', 'ENV-010', 'Envases y Embalaje', 'Envases Express', 'u.', '500', '100', '145.00', '0', 'Bulto de 100u'],
+            ['Queso Muzzarella', 'MZ-005', 'Lácteos y Frescos', 'Lácteos del Valle', 'kg', '45', '15', '4500.00', '0', 'Barra 3kg']
+        ];
+
+        let csv = headers.join(';') + '\r\n';
+        examples.forEach(row => {
+            csv += row.map(v => `"${v}"`).join(';') + '\r\n';
+        });
+
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Plantilla_Importar_Insumos.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Descarga plantilla CSV de ejemplo para importar Proveedores
+     */
+    static downloadSuppliersTemplate() {
+        const headers = ['Nombre', 'CUIT', 'Rubro', 'Telefono', 'Email', 'Direccion', 'Contacto', 'FormasDePago', 'Notas'];
+        const examples = [
+            ['Molinos del Plata', '30-71029384-9', 'Molinería e Insumos Secos', '011-4567-8900', 'ventas@molinos.com', 'Av. Corrientes 1420, CABA', 'Carlos Gómez', 'Transferencia 15 días, Cheque', 'Entrega martes y jueves'],
+            ['Distribuidora Central', '30-65498712-4', 'Distribuidora Mayorista', '011-4321-7654', 'pedidos@central.com', 'Ruta 8 Km 45', 'Mariana Pérez', 'Efectivo contra entrega', 'Pedido mínimo $50.000']
+        ];
+
+        let csv = headers.join(';') + '\r\n';
+        examples.forEach(row => {
+            csv += row.map(v => `"${v}"`).join(';') + '\r\n';
+        });
+
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Plantilla_Importar_Proveedores.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Importa insumos y auto-registra proveedores y categorías nuevos
+     */
+    static importProductsFromMatrix(rows, { updateExisting = true } = {}) {
+        if (!rows || rows.length < 2) {
+            throw new Error('El archivo o texto no contiene suficientes filas (se requiere encabezado y al menos 1 registro).');
+        }
+
+        const rawHeaders = rows[0].map(h => (h || '').toString().toLowerCase().trim());
+
+        // Mapeo flexible de nombres de columna
+        const colMap = {
+            name: rawHeaders.findIndex(h => h.includes('nombre') || h.includes('insumo') || h.includes('descripcion') || h.includes('producto') || h === 'item'),
+            code: rawHeaders.findIndex(h => h.includes('cod') || h.includes('sku') || h.includes('id')),
+            category: rawHeaders.findIndex(h => h.includes('cat') || h.includes('rubro') || h.includes('grupo')),
+            supplier: rawHeaders.findIndex(h => h.includes('prov') || h.includes('proveedor') || h.includes('vendor')),
+            unit: rawHeaders.findIndex(h => h.includes('unidad') || h.includes('unid') || h === 'u' || h === 'medida'),
+            stock: rawHeaders.findIndex(h => (h.includes('stock') && !h.includes('min')) || h.includes('cant') || h.includes('actual') || h.includes('existencia')),
+            minStock: rawHeaders.findIndex(h => h.includes('min') || h.includes('critico') || h.includes('alerta')),
+            costPrice: rawHeaders.findIndex(h => h.includes('costo') || h.includes('compra') || h.includes('neto') || h === 'precio' || h === 'cost'),
+            salePrice: rawHeaders.findIndex(h => h.includes('venta') || h.includes('pvp')),
+            notes: rawHeaders.findIndex(h => h.includes('nota') || h.includes('obs') || h.includes('detalle'))
+        };
+
+        if (colMap.name === -1) {
+            throw new Error('No se encontró la columna de Nombre del insumo (ej: "Nombre", "Insumo" o "Descripcion").');
+        }
+
+        const stats = {
+            totalRows: rows.length - 1,
+            created: 0,
+            updated: 0,
+            skipped: 0,
+            suppliersCreated: 0,
+            categoriesCreated: 0,
+            errors: []
+        };
+
+        const existingProducts = StorageManager.getProducts();
+        const existingSuppliers = StorageManager.getSuppliers();
+        const existingCategories = StorageManager.getCategories();
+
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0 || row.every(c => !c || !c.trim())) continue;
+
+            const name = (colMap.name !== -1 && row[colMap.name]) ? row[colMap.name].trim() : '';
+            if (!name) {
+                stats.skipped++;
+                continue;
+            }
+
+            const rawCode = (colMap.code !== -1 && row[colMap.code]) ? row[colMap.code].trim().toUpperCase() : '';
+            const rawCat = (colMap.category !== -1 && row[colMap.category]) ? row[colMap.category].trim() : 'Materia Prima / Insumos';
+            const rawSupplier = (colMap.supplier !== -1 && row[colMap.supplier]) ? row[colMap.supplier].trim() : '';
+            const rawUnit = (colMap.unit !== -1 && row[colMap.unit]) ? row[colMap.unit].trim() : 'u.';
+            
+            const parseNum = (val, fallback = 0) => {
+                if (!val) return fallback;
+                const clean = val.toString().replace(/\$/g, '').replace(/\s/g, '').replace(/,/g, '.');
+                const n = parseFloat(clean);
+                return isNaN(n) ? fallback : n;
+            };
+
+            const stock = colMap.stock !== -1 ? parseNum(row[colMap.stock], 0) : 0;
+            const minStock = colMap.minStock !== -1 ? parseNum(row[colMap.minStock], 0) : 0;
+            const costPrice = colMap.costPrice !== -1 ? parseNum(row[colMap.costPrice], 0) : 0;
+            const salePrice = colMap.salePrice !== -1 ? parseNum(row[colMap.salePrice], 0) : 0;
+            const notes = (colMap.notes !== -1 && row[colMap.notes]) ? row[colMap.notes].trim() : '';
+
+            // 1. Auto-crear proveedor si viene indicado y no existe
+            let supplierId = '';
+            let supplierName = '';
+            if (rawSupplier) {
+                const foundSup = existingSuppliers.find(s => s.name.toLowerCase() === rawSupplier.toLowerCase());
+                if (foundSup) {
+                    supplierId = foundSup.id;
+                    supplierName = foundSup.name;
+                } else {
+                    // Crear nuevo proveedor automáticamente
+                    const newSup = StorageManager.saveSupplier({
+                        name: rawSupplier,
+                        category: rawCat || 'General',
+                        notes: 'Creado automáticamente desde importación de insumos'
+                    });
+                    const newlyCreated = StorageManager.getSupplierByName(rawSupplier);
+                    if (newlyCreated) {
+                        supplierId = newlyCreated.id;
+                        supplierName = newlyCreated.name;
+                        existingSuppliers.push(newlyCreated);
+                    } else {
+                        supplierName = rawSupplier;
+                    }
+                    stats.suppliersCreated++;
+                }
+            }
+
+            // 2. Auto-crear categoría si no existe
+            if (rawCat && !existingCategories.some(c => c.name.toLowerCase() === rawCat.toLowerCase())) {
+                StorageManager.saveCategory({ name: rawCat, description: 'Creada en importación' });
+                existingCategories.push({ name: rawCat });
+                stats.categoriesCreated++;
+            }
+
+            // 3. Buscar si el insumo ya existe por código o nombre
+            const existingIdx = existingProducts.findIndex(p => 
+                (rawCode && p.code && p.code.toLowerCase() === rawCode.toLowerCase()) ||
+                (p.name && p.name.toLowerCase() === name.toLowerCase())
+            );
+
+            if (existingIdx >= 0) {
+                if (updateExisting) {
+                    const existing = existingProducts[existingIdx];
+                    existingProducts[existingIdx] = {
+                        ...existing,
+                        name: name,
+                        category: rawCat || existing.category,
+                        unit: rawUnit || existing.unit,
+                        currentStock: stock !== 0 ? stock : existing.currentStock,
+                        minStock: minStock !== 0 ? minStock : existing.minStock,
+                        costPrice: costPrice > 0 ? costPrice : existing.costPrice,
+                        salePrice: salePrice > 0 ? salePrice : existing.salePrice,
+                        supplierName: supplierName || existing.supplierName,
+                        supplierId: supplierId || existing.supplierId,
+                        notes: notes || existing.notes,
+                        updatedAt: new Date().toISOString()
+                    };
+                    stats.updated++;
+                } else {
+                    stats.skipped++;
+                }
+            } else {
+                // Generar código si no viene
+                let finalCode = rawCode;
+                if (!finalCode) {
+                    const initials = name.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'INS');
+                    finalCode = `${initials}-${Math.floor(100 + Math.random() * 900)}`;
+                }
+
+                existingProducts.push({
+                    id: 'prod_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    code: finalCode,
+                    name: name,
+                    category: rawCat,
+                    unit: rawUnit,
+                    currentStock: stock,
+                    minStock: minStock,
+                    costPrice: costPrice,
+                    salePrice: salePrice,
+                    supplierName: supplierName,
+                    supplierId: supplierId,
+                    notes: notes,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                stats.created++;
+            }
+        }
+
+        StorageManager.saveProducts(existingProducts);
+        return stats;
+    }
+
+    /**
+     * Importa proveedores desde matriz de filas
+     */
+    static importSuppliersFromMatrix(rows, { updateExisting = true } = {}) {
+        if (!rows || rows.length < 2) {
+            throw new Error('El archivo o texto no contiene suficientes filas.');
+        }
+
+        const rawHeaders = rows[0].map(h => (h || '').toString().toLowerCase().trim());
+        const colMap = {
+            name: rawHeaders.findIndex(h => h.includes('nombre') || h.includes('razon') || h.includes('proveedor') || h === 'empresa'),
+            cuit: rawHeaders.findIndex(h => h.includes('cuit') || h.includes('rut') || h.includes('identificacion') || h.includes('tax')),
+            category: rawHeaders.findIndex(h => h.includes('rubro') || h.includes('cat') || h.includes('actividad')),
+            phone: rawHeaders.findIndex(h => h.includes('tel') || h.includes('cel') || h.includes('phone') || h.includes('whatsapp')),
+            email: rawHeaders.findIndex(h => h.includes('mail') || h.includes('correo')),
+            address: rawHeaders.findIndex(h => h.includes('direcc') || h.includes('domicilio') || h.includes('calle')),
+            contactPerson: rawHeaders.findIndex(h => h.includes('contact') || h.includes('atencion') || h.includes('vendedor')),
+            paymentMethods: rawHeaders.findIndex(h => h.includes('pago') || h.includes('condicion') || h.includes('plazo')),
+            notes: rawHeaders.findIndex(h => h.includes('nota') || h.includes('obs'))
+        };
+
+        if (colMap.name === -1) {
+            throw new Error('No se encontró la columna con el Nombre o Razón Social del proveedor.');
+        }
+
+        const stats = {
+            totalRows: rows.length - 1,
+            created: 0,
+            updated: 0,
+            skipped: 0
+        };
+
+        const existingSuppliers = StorageManager.getSuppliers();
+
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0 || row.every(c => !c || !c.trim())) continue;
+
+            const name = (colMap.name !== -1 && row[colMap.name]) ? row[colMap.name].trim() : '';
+            if (!name) {
+                stats.skipped++;
+                continue;
+            }
+
+            const cuit = (colMap.cuit !== -1 && row[colMap.cuit]) ? row[colMap.cuit].trim() : '';
+            const category = (colMap.category !== -1 && row[colMap.category]) ? row[colMap.category].trim() : 'General';
+            const phone = (colMap.phone !== -1 && row[colMap.phone]) ? row[colMap.phone].trim() : '';
+            const email = (colMap.email !== -1 && row[colMap.email]) ? row[colMap.email].trim() : '';
+            const address = (colMap.address !== -1 && row[colMap.address]) ? row[colMap.address].trim() : '';
+            const contactPerson = (colMap.contactPerson !== -1 && row[colMap.contactPerson]) ? row[colMap.contactPerson].trim() : '';
+            const paymentMethods = (colMap.paymentMethods !== -1 && row[colMap.paymentMethods]) ? row[colMap.paymentMethods].trim() : 'A convenir';
+            const notes = (colMap.notes !== -1 && row[colMap.notes]) ? row[colMap.notes].trim() : '';
+
+            const existingIdx = existingSuppliers.findIndex(s => s.name.toLowerCase() === name.toLowerCase());
+
+            if (existingIdx >= 0) {
+                if (updateExisting) {
+                    existingSuppliers[existingIdx] = {
+                        ...existingSuppliers[existingIdx],
+                        cuit: cuit || existingSuppliers[existingIdx].cuit,
+                        category: category || existingSuppliers[existingIdx].category,
+                        phone: phone || existingSuppliers[existingIdx].phone,
+                        email: email || existingSuppliers[existingIdx].email,
+                        address: address || existingSuppliers[existingIdx].address,
+                        contactPerson: contactPerson || existingSuppliers[existingIdx].contactPerson,
+                        paymentMethods: paymentMethods || existingSuppliers[existingIdx].paymentMethods,
+                        notes: notes || existingSuppliers[existingIdx].notes,
+                        updatedAt: new Date().toISOString()
+                    };
+                    stats.updated++;
+                } else {
+                    stats.skipped++;
+                }
+            } else {
+                existingSuppliers.push({
+                    id: 'sup_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    name,
+                    cuit,
+                    category,
+                    phone,
+                    email,
+                    address,
+                    contactPerson,
+                    paymentMethods,
+                    notes,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                stats.created++;
+            }
+        }
+
+        StorageManager.saveSuppliers(existingSuppliers);
+        return stats;
+    }
 }
+

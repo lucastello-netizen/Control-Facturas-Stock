@@ -2718,6 +2718,196 @@ const App = {
             this.showToast('Todos los datos han sido borrados.', 'info');
             this.init();
         }
+    },
+
+    // ==========================================
+    // ASISTENTE DE IMPORTACIÓN MASIVA (EXCEL / CSV)
+    // ==========================================
+    activeImportTab: 'insumos',
+    parsedImportRows: [],
+
+    openImportModal(tab = 'insumos') {
+        const modal = document.getElementById('importModal');
+        if (!modal) return;
+
+        this.switchImportTab(tab);
+        this.clearImportData();
+        modal.classList.remove('hidden');
+    },
+
+    closeImportModal() {
+        const modal = document.getElementById('importModal');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    switchImportTab(tab) {
+        this.activeImportTab = tab;
+
+        const btnInsumos = document.getElementById('importTabBtnInsumos');
+        const btnProveedores = document.getElementById('importTabBtnProveedores');
+        const hintEl = document.getElementById('importColumnsHint');
+        const btnTemplate = document.getElementById('btnDownloadTemplate');
+
+        if (tab === 'insumos') {
+            btnInsumos.className = 'px-4 py-2 border-b-2 border-emerald-600 text-emerald-700 font-bold text-xs flex items-center gap-2 transition-colors';
+            btnProveedores.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors';
+            if (hintEl) {
+                hintEl.innerHTML = `
+                    <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Nombre</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Codigo</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Categoria</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Proveedor</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Unidad</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockActual</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockMinimo</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CostoNeto</span>
+                `;
+            }
+            if (btnTemplate) btnTemplate.innerHTML = `<i class="fa-solid fa-file-arrow-down"></i><span>Plantilla Insumos (.csv)</span>`;
+        } else {
+            btnProveedores.className = 'px-4 py-2 border-b-2 border-teal-600 text-teal-700 font-bold text-xs flex items-center gap-2 transition-colors';
+            btnInsumos.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors';
+            if (hintEl) {
+                hintEl.innerHTML = `
+                    <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Nombre</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CUIT</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Rubro</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Telefono</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Email</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Direccion</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Contacto</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">FormasDePago</span>
+                `;
+            }
+            if (btnTemplate) btnTemplate.innerHTML = `<i class="fa-solid fa-file-arrow-down"></i><span>Plantilla Proveedores (.csv)</span>`;
+        }
+
+        // Si ya había texto pegado o archivo subido, refrescar vista previa con las nuevas reglas
+        if (this.parsedImportRows && this.parsedImportRows.length > 0) {
+            this.renderImportPreview();
+        }
+    },
+
+    downloadImportTemplate() {
+        if (this.activeImportTab === 'insumos') {
+            ProductManager.downloadProductsTemplate();
+        } else {
+            ProductManager.downloadSuppliersTemplate();
+        }
+    },
+
+    handleImportFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const nameLabel = document.getElementById('importSelectedFileName');
+        if (nameLabel) nameLabel.textContent = `Archivo: ${file.name}`;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            this.parsedImportRows = ProductManager.parseDelimitedText(content);
+            this.renderImportPreview();
+        };
+        reader.readAsText(file);
+    },
+
+    handleImportPasteInput() {
+        const textarea = document.getElementById('importPasteTextarea');
+        if (!textarea) return;
+        const text = textarea.value;
+        this.parsedImportRows = ProductManager.parseDelimitedText(text);
+        this.renderImportPreview();
+    },
+
+    renderImportPreview() {
+        const rows = this.parsedImportRows;
+        const previewContainer = document.getElementById('importPreviewContainer');
+        const countSpan = document.getElementById('importPreviewCount');
+        const thead = document.getElementById('importPreviewThead');
+        const tbody = document.getElementById('importPreviewTbody');
+        const btnExecute = document.getElementById('btnExecuteImport');
+        const statusMsg = document.getElementById('importStatusMessage');
+
+        if (!rows || rows.length < 2) {
+            if (previewContainer) previewContainer.classList.add('hidden');
+            if (btnExecute) btnExecute.disabled = true;
+            if (statusMsg) statusMsg.textContent = rows.length === 1 ? 'Se detectó solo el encabezado. Agrega filas con datos.' : '';
+            return;
+        }
+
+        const headers = rows[0];
+        const dataRows = rows.slice(1, 6); // Mostrar hasta las primeras 5 filas de muestra
+        const totalCount = rows.length - 1;
+
+        if (countSpan) countSpan.textContent = totalCount;
+
+        // Renderizar encabezados
+        if (thead) {
+            thead.innerHTML = `<tr>${headers.map(h => `<th class="py-2.5 px-3 whitespace-nowrap bg-slate-100 text-slate-700 font-bold">${h || '-'}</th>`).join('')}</tr>`;
+        }
+
+        // Renderizar filas de muestra
+        if (tbody) {
+            tbody.innerHTML = dataRows.map(row => {
+                return `<tr class="hover:bg-slate-50">${row.map(cell => `<td class="py-2 px-3 whitespace-nowrap text-slate-700 font-medium">${cell || '<span class="text-slate-300">-</span>'}</td>`).join('')}</tr>`;
+            }).join('');
+        }
+
+        if (previewContainer) previewContainer.classList.remove('hidden');
+        if (btnExecute) btnExecute.disabled = false;
+        if (statusMsg) statusMsg.innerHTML = `<span class="text-emerald-700 font-bold">✓ ${totalCount} filas listas para procesar.</span>`;
+    },
+
+    clearImportData() {
+        this.parsedImportRows = [];
+        const fileInput = document.getElementById('importFileInput');
+        if (fileInput) fileInput.value = '';
+        const nameLabel = document.getElementById('importSelectedFileName');
+        if (nameLabel) nameLabel.textContent = '';
+        const textarea = document.getElementById('importPasteTextarea');
+        if (textarea) textarea.value = '';
+        const previewContainer = document.getElementById('importPreviewContainer');
+        if (previewContainer) previewContainer.classList.add('hidden');
+        const btnExecute = document.getElementById('btnExecuteImport');
+        if (btnExecute) btnExecute.disabled = true;
+        const statusMsg = document.getElementById('importStatusMessage');
+        if (statusMsg) statusMsg.textContent = '';
+    },
+
+    executeImport() {
+        if (!this.parsedImportRows || this.parsedImportRows.length < 2) {
+            this.showToast('No hay datos para importar.', 'warning');
+            return;
+        }
+
+        const updateExisting = document.getElementById('importUpdateExistingCheck')?.checked ?? true;
+
+        try {
+            if (this.activeImportTab === 'insumos') {
+                const stats = ProductManager.importProductsFromMatrix(this.parsedImportRows, { updateExisting });
+                
+                let message = `¡Importación completada! ${stats.created} creados, ${stats.updated} actualizados.`;
+                if (stats.suppliersCreated > 0) {
+                    message += ` (${stats.suppliersCreated} proveedores nuevos registrados).`;
+                }
+                this.showToast(message, 'success');
+            } else {
+                const stats = ProductManager.importSuppliersFromMatrix(this.parsedImportRows, { updateExisting });
+                this.showToast(`¡Proveedores importados! ${stats.created} creados, ${stats.updated} actualizados.`, 'success');
+            }
+
+            this.closeImportModal();
+            this.populateDropdowns();
+            this.renderProductsTable();
+            this.renderSuppliersView();
+            if (this.currentView === 'dashboard') this.renderDashboard();
+            if (this.currentView === 'inventarios') this.renderInventorySheets();
+            if (this.currentView === 'cmv') this.renderCMVView();
+        } catch (err) {
+            console.error(err);
+            this.showToast(err.message || 'Error durante la importación.', 'error');
+        }
     }
 };
 
