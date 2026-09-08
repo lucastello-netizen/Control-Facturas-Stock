@@ -2286,10 +2286,19 @@ const App = {
         const searchTerm = document.getElementById('prodSearchInput')?.value || '';
         const category = document.getElementById('prodCategoryFilter')?.value || '';
         const stockFilter = document.getElementById('prodStockFilter')?.value || 'all';
+        const period = this.activePeriod || new Date().toISOString().slice(0, 7);
 
-        const products = ProductManager.getFilteredProducts({ searchTerm, category, stockFilter });
+        const products = ProductManager.getFilteredProducts({ searchTerm, category, stockFilter, period });
         const settings = StorageManager.getSettings();
         const curr = settings.currency || '$';
+
+        const badgeEl = document.getElementById('prodPeriodBadge');
+        if (badgeEl) {
+            const [y, m] = period.split('-');
+            const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+            const monthName = dateObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+            badgeEl.textContent = `Mes: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`;
+        }
 
         const tbody = document.getElementById('productsTableBody');
         if (products.length === 0) {
@@ -2299,6 +2308,8 @@ const App = {
 
         tbody.innerHTML = products.map(p => {
             const stock = p.currentStock || 0;
+            const initStock = p.initialMonthStock || 0;
+            const purchStock = p.monthPurchasesQty || 0;
             const min = p.minStock || 0;
             const cost = p.costPrice || 0;
             const totalVal = Number((stock * cost).toFixed(2));
@@ -2319,7 +2330,12 @@ const App = {
                         ${p.supplierName ? `<span class="bg-slate-100 px-2 py-0.5 rounded text-slate-700">${p.supplierName}</span>` : '<span class="text-slate-400 italic">Sin asignar</span>'}
                     </td>
                     <td class="py-2.5 px-2 text-center text-slate-600 font-medium">${p.unit}</td>
-                    <td class="py-2.5 px-3 text-right font-black ${stock <= min ? 'text-amber-600' : 'text-slate-800'}">${stock}</td>
+                    <td class="py-2.5 px-3 text-right">
+                        <div class="font-black ${stock <= min ? 'text-amber-600' : 'text-slate-800'} text-xs">${stock}</div>
+                        <span class="text-[10px] text-slate-400 font-normal block leading-tight" title="Stock Inicial del mes: ${initStock} + Compras acumuladas del mes: ${purchStock}">
+                            II: ${initStock} + C: ${purchStock}
+                        </span>
+                    </td>
                     <td class="py-2.5 px-3 text-right text-slate-400">${min}</td>
                     <td class="py-2.5 px-3 text-right text-slate-600">${curr} ${cost.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
                     <td class="py-2.5 px-3 text-right font-bold text-slate-800">${curr} ${totalVal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>

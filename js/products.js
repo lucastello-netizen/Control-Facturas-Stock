@@ -6,8 +6,44 @@
 class ProductManager {
     static UNITS = ['u.', 'kg', 'g', 'l', 'ml', 'm', 'caja', 'paq.', 'docena'];
 
-    static getFilteredProducts({ searchTerm = '', category = '', stockFilter = 'all', supplier = '' } = {}) {
+    static getFilteredProducts({ searchTerm = '', category = '', stockFilter = 'all', supplier = '', period = '' } = {}) {
         let products = StorageManager.getProducts();
+
+        // Calcular inventario inicial del mes y compras a la fecha para cada producto
+        let initialInv = {};
+        let purchasesByProduct = {};
+
+        const targetPeriod = period || (typeof App !== 'undefined' && App.activePeriod ? App.activePeriod : new Date().toISOString().slice(0, 7));
+
+        if (targetPeriod) {
+            const periodData = StorageManager.getPeriodData(targetPeriod);
+            initialInv = periodData.initialInventory || {};
+
+            const allPurchases = StorageManager.getPurchases();
+            const monthPurchases = allPurchases.filter(p => p.date && p.date.startsWith(targetPeriod));
+
+            monthPurchases.forEach(purch => {
+                (purch.items || []).forEach(it => {
+                    if (it.productId) {
+                        purchasesByProduct[it.productId] = (purchasesByProduct[it.productId] || 0) + Number(it.quantity || 0);
+                    }
+                });
+            });
+        }
+
+        // Enriquecer cada producto con métricas de stock del mes
+        products = products.map(p => {
+            const initQty = Number(initialInv[p.id]?.qty || 0);
+            const purchQty = Number((purchasesByProduct[p.id] || 0).toFixed(3));
+            const calculatedStock = Number((initQty + purchQty).toFixed(3));
+
+            return {
+                ...p,
+                initialMonthStock: initQty,
+                monthPurchasesQty: purchQty,
+                currentStock: calculatedStock
+            };
+        });
 
         if (searchTerm.trim()) {
             const term = searchTerm.toLowerCase().trim();
@@ -141,18 +177,21 @@ class ProductManager {
         return updated;
     }
 
-    static exportProductsToCSV() {
-        const products = StorageManager.getProducts();
+    static exportProductsToCSV(period = '') {
+        const activePeriod = period || (typeof App !== 'undefined' && App.activePeriod ? App.activePeriod : new Date().toISOString().slice(0, 7));
+        const products = this.getFilteredProducts({ period: activePeriod });
         const settings = StorageManager.getSettings();
         const curr = settings.currency || '$';
 
         let csv = `LISTADO DE INSUMOS Y MERCADERIA - ${settings.businessName}\r\n`;
-        csv += `Fecha: ${new Date().toLocaleDateString()}\r\n\r\n`;
+        csv += `Período: ${activePeriod} | Fecha reporte: ${new Date().toLocaleDateString()}\r\n\r\n`;
 
-        const headers = ['Codigo', 'Nombre/Descripcion', 'Categoria', 'Proveedor Habitual', 'Unidad', 'Stock Actual', 'Stock Minimo', 'Costo Unitario ($)', 'Precio Venta ($)', 'Valor Total Stock ($)', 'Estado'];
+        const headers = ['Codigo', 'Nombre/Descripcion', 'Categoria', 'Proveedor Habitual', 'Unidad', 'Stock Inicial (II)', 'Compras Mes', 'Stock Actual Total', 'Stock Minimo', 'Costo Unitario ($)', 'Precio Venta ($)', 'Valor Total Stock ($)', 'Estado'];
         csv += headers.map(h => `"${h}"`).join(';') + '\r\n';
 
         products.forEach(p => {
+            const initStock = p.initialMonthStock || 0;
+            const purchStock = p.monthPurchasesQty || 0;
             const stock = p.currentStock || 0;
             const min = p.minStock || 0;
             const cost = p.costPrice || 0;
@@ -168,6 +207,8 @@ class ProductManager {
                 p.category,
                 p.supplierName || 'Sin asignar',
                 p.unit,
+                initStock,
+                purchStock,
                 stock,
                 min,
                 cost,
@@ -182,7 +223,7 @@ class ProductManager {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Productos_Stock_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.download = `Productos_Stock_${activePeriod}_${new Date().toISOString().slice(0, 10)}.csv`;
         a.click();
         URL.revokeObjectURL(url);
     }
