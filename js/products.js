@@ -546,5 +546,160 @@ class ProductManager {
         StorageManager.saveSuppliers(existingSuppliers);
         return stats;
     }
+
+    /**
+     * Descarga plantilla CSV de ejemplo para importar Inventarios / Conteos Físicos
+     */
+    static downloadInventoryTemplate() {
+        const headers = ['Codigo', 'Nombre', 'Cantidad', 'CostoUnitario'];
+        const examples = [
+            ['HAR-001', 'Harina 000 25kg', '120', '850.50'],
+            ['LEV-002', 'Levadura Fresca', '18', '1200.00'],
+            ['ENV-010', 'Cajas Packaging 20x20', '450', '145.00'],
+            ['MZ-005', 'Queso Muzzarella', '38', '4500.00']
+        ];
+
+        let csv = headers.join(';') + '\r\n';
+        examples.forEach(row => {
+            csv += row.map(v => `"${v}"`).join(';') + '\r\n';
+        });
+
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Plantilla_Importar_Inventario.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Importa conteo de inventario (II, IF o Snapshot) desde matriz de filas
+     */
+    static importInventoryFromMatrix(rows, { targetType = 'inicial', targetPeriod = '', snapshotName = '', snapshotDate = '' } = {}) {
+        if (!rows || rows.length < 2) {
+            throw new Error('El archivo o texto no contiene suficientes filas.');
+        }
+
+        const rawHeaders = rows[0].map(h => (h || '').toString().toLowerCase().trim());
+        const colMap = {
+            code: rawHeaders.findIndex(h => h.includes('cod') || h.includes('sku') || h.includes('id')),
+            name: rawHeaders.findIndex(h => h.includes('nombre') || h.includes('insumo') || h.includes('descripcion') || h.includes('item') || h.includes('producto')),
+            qty: rawHeaders.findIndex(h => h.includes('cant') || h.includes('stock') || h.includes('conteo') || h.includes('fisico') || h.includes('unid')),
+            cost: rawHeaders.findIndex(h => h.includes('cost') || h.includes('unitario') || h.includes('precio') || h.includes('neto'))
+        };
+
+        if (colMap.qty === -1) {
+            throw new Error('No se encontró la columna de Cantidad o Conteo en el archivo.');
+        }
+        if (colMap.code === -1 && colMap.name === -1) {
+            throw new Error('Se requiere al menos una columna de "Codigo" o "Nombre" para identificar los insumos.');
+        }
+
+        const stats = {
+            totalRows: rows.length - 1,
+            counted: 0,
+            productsCreated: 0,
+            skipped: 0
+        };
+
+        const existingProducts = StorageManager.getProducts();
+
+        const parseNum = (val, fallback = 0) => {
+            if (val === undefined || val === null || val === '') return null;
+            const clean = val.toString().replace(/\$/g, '').replace(/\s/g, '').replace(/,/g, '.');
+            const n = parseFloat(clean);
+            return isNaN(n) ? fallback : n;
+        };
+
+        // Mapa acumulador por productId: { qty, unitCost }
+        const countsByProductId = {};
+
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0 || row.every(c => !c || !c.trim())) continue;
+
+            const code = colMap.code !== -1 && row[colMap.code] ? row[colMap.code].trim().toUpperCase() : '';
+            const name = colMap.name !== -1 && row[colMap.name] ? row[colMap.name].trim() : '';
+            const qtyVal = parseNum(row[colMap.qty], null);
+            const costVal = colMap.cost !== -1 ? parseNum(row[colMap.cost], 0) : 0;
+
+            if (qtyVal === null) {
+                stats.skipped++;
+                continue;
+            }
+
+            // Buscar insumo existente
+            let product = null;
+            if (code) {
+                product = existingProducts.find(p => p.code && p.code.toUpperCase() === code);
+            }
+            if (!product && name) {
+                product = existingProducts.find(p => p.name && p.name.toLowerCase() === name.toLowerCase());
+            }
+
+            // Si no existe, crearlo automáticamente para no perder el conteo
+            if (!product) {
+                const finalCode = code || (name ? `${name.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'INS')}-${Math.floor(100 + Math.random() * 900)}` : `INS-${Date.now().toString().slice(-4)}`);
+                const finalName = name || `Insumo ${finalCode}`;
+                
+                product = {
+                    id: 'prod_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    code: finalCode,
+                    name: finalName,
+                    category: 'Materia Prima / Insumos',
+                    unit: 'u.',
+                    currentStock: qtyVal,
+                    minStock: 0,
+                    costPrice: costVal || 0,
+                    salePrice: 0,
+                    supplierName: '',
+                    notes: 'Creado automáticamente desde importación de inventario',
+                    createdAt: new Date().toISOString()
+                };
+                existingProducts.push(product);
+                StorageManager.saveProduct(product);
+                stats.productsCreated++;
+            }
+
+            countsByProductId[product.id] = {
+                qty: qtyVal,
+                unitCost: costVal > 0 ? costVal : (product.costPrice || 0)
+            };
+            stats.counted++;
+        }
+
+        // Aplicar según targetType
+        if (targetType === 'inicial') {
+            const periodData = StorageManager.getPeriodData(targetPeriod);
+            const currentInitial = periodData.initialInventory || {};
+            Object.keys(countsByProductId).forEach(pId => {
+                currentInitial[pId] = {
+                    qty: countsByProductId[pId].qty,
+                    unitCost: countsByProductId[pId].unitCost
+                };
+            });
+            CMVManager.saveInitialInventory(targetPeriod, currentInitial);
+        } else if (targetType === 'final') {
+            const periodData = StorageManager.getPeriodData(targetPeriod);
+            const currentFinal = periodData.finalInventory || {};
+            Object.keys(countsByProductId).forEach(pId => {
+                currentFinal[pId] = {
+                    qty: countsByProductId[pId].qty
+                };
+            });
+            CMVManager.saveFinalInventory(targetPeriod, currentFinal);
+        } else if (targetType === 'snapshot') {
+            const snap = {
+                name: snapshotName.trim() || `Conteo Importado ${snapshotDate || new Date().toISOString().slice(0, 10)}`,
+                date: snapshotDate || new Date().toISOString().slice(0, 10),
+                notes: 'Importado masivamente desde Excel/CSV',
+                items: countsByProductId
+            };
+            StorageManager.saveSnapshot(snap);
+        }
+
+        return stats;
+    }
 }
 

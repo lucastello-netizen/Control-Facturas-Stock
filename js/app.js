@@ -2726,11 +2726,11 @@ const App = {
     activeImportTab: 'insumos',
     parsedImportRows: [],
 
-    openImportModal(tab = 'insumos') {
+    openImportModal(tab = 'insumos', subTarget = 'inicial') {
         const modal = document.getElementById('importModal');
         if (!modal) return;
 
-        this.switchImportTab(tab);
+        this.switchImportTab(tab, subTarget);
         this.clearImportData();
         modal.classList.remove('hidden');
     },
@@ -2740,49 +2740,99 @@ const App = {
         if (modal) modal.classList.add('hidden');
     },
 
-    switchImportTab(tab) {
+    handleImportInvTargetChange() {
+        const selectedRadio = document.querySelector('input[name="importInvTargetRadio"]:checked');
+        const target = selectedRadio ? selectedRadio.value : 'inicial';
+        const periodWrapper = document.getElementById('importInvPeriodWrapper');
+        const snapshotWrapper = document.getElementById('importInvSnapshotWrapper');
+
+        if (target === 'snapshot') {
+            if (periodWrapper) periodWrapper.classList.add('hidden');
+            if (snapshotWrapper) snapshotWrapper.classList.remove('hidden');
+        } else {
+            if (periodWrapper) periodWrapper.classList.remove('hidden');
+            if (snapshotWrapper) snapshotWrapper.classList.add('hidden');
+        }
+    },
+
+    switchImportTab(tab, subTarget = 'inicial') {
         this.activeImportTab = tab;
 
         const btnInsumos = document.getElementById('importTabBtnInsumos');
         const btnProveedores = document.getElementById('importTabBtnProveedores');
+        const btnInventarios = document.getElementById('importTabBtnInventarios');
+        const invConfigPanel = document.getElementById('importInventoryConfigPanel');
         const hintEl = document.getElementById('importColumnsHint');
         const btnTemplate = document.getElementById('btnDownloadTemplate');
 
-        if (tab === 'insumos') {
-            btnInsumos.className = 'px-4 py-2 border-b-2 border-emerald-600 text-emerald-700 font-bold text-xs flex items-center gap-2 transition-colors';
-            btnProveedores.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors';
+        const activeClass = 'px-4 py-2 border-b-2 border-emerald-600 text-emerald-700 font-bold text-xs flex items-center gap-2 transition-colors whitespace-nowrap';
+        const inactiveClass = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors whitespace-nowrap';
+
+        if (btnInsumos) btnInsumos.className = tab === 'insumos' ? activeClass : inactiveClass;
+        if (btnProveedores) btnProveedores.className = tab === 'proveedores' ? activeClass : inactiveClass;
+        if (btnInventarios) btnInventarios.className = tab === 'inventarios' ? activeClass : inactiveClass;
+
+        if (tab === 'inventarios') {
+            if (invConfigPanel) invConfigPanel.classList.remove('hidden');
+
+            const radio = document.querySelector(`input[name="importInvTargetRadio"][value="${subTarget}"]`);
+            if (radio) radio.checked = true;
+
+            const periodInput = document.getElementById('importInvPeriodInput');
+            if (periodInput) periodInput.value = this.activePeriod || new Date().toISOString().slice(0, 7);
+
+            const snapDateInput = document.getElementById('importInvSnapshotDate');
+            if (snapDateInput) snapDateInput.value = new Date().toISOString().slice(0, 10);
+            const snapNameInput = document.getElementById('importInvSnapshotName');
+            if (snapNameInput && !snapNameInput.value) {
+                snapNameInput.value = `Conteo Importado ${new Date().toLocaleDateString('es-ES')}`;
+            }
+
+            this.handleImportInvTargetChange();
+
             if (hintEl) {
                 hintEl.innerHTML = `
+                    <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Codigo</span>, 
                     <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Nombre</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Codigo</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Categoria</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Proveedor</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Unidad</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockActual</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockMinimo</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CostoNeto</span>
+                    <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Cantidad</span>, 
+                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CostoUnitario (opcional)</span>
                 `;
             }
-            if (btnTemplate) btnTemplate.innerHTML = `<i class="fa-solid fa-file-arrow-down"></i><span>Plantilla Insumos (.csv)</span>`;
+            if (btnTemplate) btnTemplate.innerHTML = `<i class="fa-solid fa-file-arrow-down"></i><span>Plantilla Inventario (.csv)</span>`;
         } else {
-            btnProveedores.className = 'px-4 py-2 border-b-2 border-teal-600 text-teal-700 font-bold text-xs flex items-center gap-2 transition-colors';
-            btnInsumos.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors';
-            if (hintEl) {
-                hintEl.innerHTML = `
-                    <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Nombre</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CUIT</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Rubro</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Telefono</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Email</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Direccion</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Contacto</span>, 
-                    <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">FormasDePago</span>
-                `;
+            if (invConfigPanel) invConfigPanel.classList.add('hidden');
+
+            if (tab === 'insumos') {
+                if (hintEl) {
+                    hintEl.innerHTML = `
+                        <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Nombre</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Codigo</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Categoria</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Proveedor</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Unidad</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockActual</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">StockMinimo</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CostoNeto</span>
+                    `;
+                }
+                if (btnTemplate) btnTemplate.innerHTML = `<i class="fa-solid fa-file-arrow-down"></i><span>Plantilla Insumos (.csv)</span>`;
+            } else {
+                if (hintEl) {
+                    hintEl.innerHTML = `
+                        <span class="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-sky-200">Nombre</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">CUIT</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Rubro</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Telefono</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Email</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Direccion</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">Contacto</span>, 
+                        <span class="font-mono bg-white px-1.5 py-0.5 rounded border border-sky-200">FormasDePago</span>
+                    `;
+                }
+                if (btnTemplate) btnTemplate.innerHTML = `<i class="fa-solid fa-file-arrow-down"></i><span>Plantilla Proveedores (.csv)</span>`;
             }
-            if (btnTemplate) btnTemplate.innerHTML = `<i class="fa-solid fa-file-arrow-down"></i><span>Plantilla Proveedores (.csv)</span>`;
         }
 
-        // Si ya había texto pegado o archivo subido, refrescar vista previa con las nuevas reglas
         if (this.parsedImportRows && this.parsedImportRows.length > 0) {
             this.renderImportPreview();
         }
@@ -2791,8 +2841,10 @@ const App = {
     downloadImportTemplate() {
         if (this.activeImportTab === 'insumos') {
             ProductManager.downloadProductsTemplate();
-        } else {
+        } else if (this.activeImportTab === 'proveedores') {
             ProductManager.downloadSuppliersTemplate();
+        } else if (this.activeImportTab === 'inventarios') {
+            ProductManager.downloadInventoryTemplate();
         }
     },
 
@@ -2837,17 +2889,15 @@ const App = {
         }
 
         const headers = rows[0];
-        const dataRows = rows.slice(1, 6); // Mostrar hasta las primeras 5 filas de muestra
+        const dataRows = rows.slice(1, 6);
         const totalCount = rows.length - 1;
 
         if (countSpan) countSpan.textContent = totalCount;
 
-        // Renderizar encabezados
         if (thead) {
             thead.innerHTML = `<tr>${headers.map(h => `<th class="py-2.5 px-3 whitespace-nowrap bg-slate-100 text-slate-700 font-bold">${h || '-'}</th>`).join('')}</tr>`;
         }
 
-        // Renderizar filas de muestra
         if (tbody) {
             tbody.innerHTML = dataRows.map(row => {
                 return `<tr class="hover:bg-slate-50">${row.map(cell => `<td class="py-2 px-3 whitespace-nowrap text-slate-700 font-medium">${cell || '<span class="text-slate-300">-</span>'}</td>`).join('')}</tr>`;
@@ -2892,9 +2942,34 @@ const App = {
                     message += ` (${stats.suppliersCreated} proveedores nuevos registrados).`;
                 }
                 this.showToast(message, 'success');
-            } else {
+            } else if (this.activeImportTab === 'proveedores') {
                 const stats = ProductManager.importSuppliersFromMatrix(this.parsedImportRows, { updateExisting });
                 this.showToast(`¡Proveedores importados! ${stats.created} creados, ${stats.updated} actualizados.`, 'success');
+            } else if (this.activeImportTab === 'inventarios') {
+                const selectedRadio = document.querySelector('input[name="importInvTargetRadio"]:checked');
+                const targetType = selectedRadio ? selectedRadio.value : 'inicial';
+                const targetPeriod = document.getElementById('importInvPeriodInput')?.value || this.activePeriod;
+                const snapshotName = document.getElementById('importInvSnapshotName')?.value || '';
+                const snapshotDate = document.getElementById('importInvSnapshotDate')?.value || '';
+
+                const stats = ProductManager.importInventoryFromMatrix(this.parsedImportRows, {
+                    targetType,
+                    targetPeriod,
+                    snapshotName,
+                    snapshotDate
+                });
+
+                const targetLabels = {
+                    'inicial': `Inventario Inicial (${targetPeriod})`,
+                    'final': `Conteo Final (${targetPeriod})`,
+                    'snapshot': `Conteo con Fecha (${snapshotDate})`
+                };
+
+                let message = `¡Inventario importado a ${targetLabels[targetType] || targetType}! Se cargaron ${stats.counted} insumos.`;
+                if (stats.productsCreated > 0) {
+                    message += ` (${stats.productsCreated} insumos nuevos dados de alta en catálogo).`;
+                }
+                this.showToast(message, 'success');
             }
 
             this.closeImportModal();

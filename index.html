@@ -655,6 +655,10 @@
                             <p class="text-xs text-sky-700 mt-0.5">Ingresa las cantidades y costos con los que arranca el mes. O arrastra automáticamente el saldo final del mes anterior.</p>
                         </div>
                         <div class="flex items-center gap-2">
+                            <button onclick="App.openImportModal('inventarios', 'inicial')" class="inline-flex items-center gap-2 bg-white hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-colors">
+                                <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                                <span>Importar II desde Excel</span>
+                            </button>
                             <button onclick="App.rollForwardInitialInventory()" class="inline-flex items-center gap-2 bg-white hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors">
                                 <i class="fa-solid fa-arrow-right-arrow-left text-sky-600"></i>
                                 <span>Traer Saldo Final Mes Anterior</span>
@@ -705,6 +709,10 @@
                             <p class="text-xs text-emerald-700 mt-0.5">Ingresa las cantidades reales contadas en depósito al finalizar el mes para determinar el consumo y CMV.</p>
                         </div>
                         <div class="flex items-center gap-2">
+                            <button onclick="App.openImportModal('inventarios', 'final')" class="inline-flex items-center gap-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-colors">
+                                <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                                <span>Importar Conteo desde Excel</span>
+                            </button>
                             <button onclick="App.printBlankCountSheet()" class="inline-flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors">
                                 <i class="fa-solid fa-print text-slate-500"></i>
                                 <span>Imprimir Hoja de Conteo en Blanco</span>
@@ -751,10 +759,16 @@
                             </h4>
                             <p class="text-xs text-violet-700 mt-0.5">Registrá conteos en cualquier fecha. Luego cruzalos en CMV → "Por Período Libre" para calcular el consumo y CMV exacto entre dos fechas.</p>
                         </div>
-                        <button onclick="App.openSnapshotModal()" class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm transition-colors whitespace-nowrap">
-                            <i class="fa-solid fa-plus"></i>
-                            <span>Nuevo Conteo</span>
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button onclick="App.openImportModal('inventarios', 'snapshot')" class="inline-flex items-center gap-2 bg-white hover:bg-violet-100 text-violet-800 border border-violet-300 text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-colors whitespace-nowrap">
+                                <i class="fa-solid fa-file-excel text-violet-600"></i>
+                                <span>Importar Conteo a Snapshot</span>
+                            </button>
+                            <button onclick="App.openSnapshotModal()" class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm transition-colors whitespace-nowrap">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Nuevo Conteo Manual</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Tabla de snapshots -->
@@ -1343,26 +1357,78 @@
 
             <!-- Tab Selector -->
             <div class="px-6 pt-4 border-b border-slate-100 flex items-center justify-between gap-4 shrink-0 bg-white">
-                <div class="flex gap-2">
-                    <button id="importTabBtnInsumos" onclick="App.switchImportTab('insumos')" class="px-4 py-2 border-b-2 border-emerald-600 text-emerald-700 font-bold text-xs flex items-center gap-2 transition-colors">
+                <div class="flex gap-2 overflow-x-auto">
+                    <button id="importTabBtnInsumos" onclick="App.switchImportTab('insumos')" class="px-4 py-2 border-b-2 border-emerald-600 text-emerald-700 font-bold text-xs flex items-center gap-2 transition-colors whitespace-nowrap">
                         <i class="fa-solid fa-boxes-stacked"></i>
-                        <span>Importar Insumos (con Proveedor)</span>
+                        <span>1. Insumos (con Proveedor)</span>
                     </button>
-                    <button id="importTabBtnProveedores" onclick="App.switchImportTab('proveedores')" class="px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors">
+                    <button id="importTabBtnProveedores" onclick="App.switchImportTab('proveedores')" class="px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors whitespace-nowrap">
                         <i class="fa-solid fa-truck-field"></i>
-                        <span>Importar Directorio de Proveedores</span>
+                        <span>2. Proveedores</span>
+                    </button>
+                    <button id="importTabBtnInventarios" onclick="App.switchImportTab('inventarios')" class="px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center gap-2 transition-colors whitespace-nowrap">
+                        <i class="fa-solid fa-clipboard-check"></i>
+                        <span>3. Planillas de Inventario / Conteos</span>
                     </button>
                 </div>
                 <div>
-                    <button id="btnDownloadTemplate" onclick="App.downloadImportTemplate()" class="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg font-semibold transition-colors">
+                    <button id="btnDownloadTemplate" onclick="App.downloadImportTemplate()" class="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg font-semibold transition-colors whitespace-nowrap">
                         <i class="fa-solid fa-file-arrow-down"></i>
-                        <span>Descargar Plantilla de Ejemplo (.csv)</span>
+                        <span>Descargar Plantilla (.csv)</span>
                     </button>
                 </div>
             </div>
 
             <!-- Modal Body Scrollable -->
             <div class="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+                <!-- Destino de Inventario (solo visible en pestaña inventarios) -->
+                <div id="importInventoryConfigPanel" class="hidden bg-emerald-50/60 border border-emerald-200 rounded-xl p-4 space-y-3">
+                    <div class="font-bold text-emerald-950 text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-bullseye text-emerald-600"></i>
+                        <span>¿A qué planilla deseas cargar este conteo de inventario?</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <label class="flex items-start gap-2 bg-white p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-500 shadow-sm transition-all">
+                            <input type="radio" name="importInvTargetRadio" value="inicial" checked onchange="App.handleImportInvTargetChange()" class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
+                            <div>
+                                <span class="font-bold text-slate-800 block text-xs">Inventario Inicial (II)</span>
+                                <span class="text-[10px] text-slate-500 block">Stock de inicio de mes</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2 bg-white p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-500 shadow-sm transition-all">
+                            <input type="radio" name="importInvTargetRadio" value="final" onchange="App.handleImportInvTargetChange()" class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
+                            <div>
+                                <span class="font-bold text-slate-800 block text-xs">Conteo Final (IF)</span>
+                                <span class="text-[10px] text-slate-500 block">Cierre mensual y CMV</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2 bg-white p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-500 shadow-sm transition-all">
+                            <input type="radio" name="importInvTargetRadio" value="snapshot" onchange="App.handleImportInvTargetChange()" class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
+                            <div>
+                                <span class="font-bold text-slate-800 block text-xs">Conteo con Fecha</span>
+                                <span class="text-[10px] text-slate-500 block">Snapshot con fecha libre</span>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div id="importInvPeriodWrapper">
+                            <label class="block text-[11px] font-bold text-slate-700 mb-1">Mes del Período:</label>
+                            <input type="month" id="importInvPeriodInput" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        </div>
+                        <div id="importInvSnapshotWrapper" class="hidden sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-700 mb-1">Nombre del Conteo:</label>
+                                <input type="text" id="importInvSnapshotName" placeholder="Ej: Conteo Físico Importado" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-700 mb-1">Fecha del Conteo:</label>
+                                <input type="date" id="importInvSnapshotDate" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Info banner -->
                 <div id="importInfoBanner" class="bg-sky-50 border border-sky-200 rounded-xl p-3.5 flex items-start gap-3 text-sky-900">
                     <i class="fa-solid fa-circle-info text-sky-600 mt-0.5 text-sm shrink-0"></i>
